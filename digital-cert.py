@@ -1,4 +1,9 @@
 #!/usr/bin/env python3
+#
+# Description   :- Generate self signed CA and certificates.
+# Author        :- Muhammed Iqbal <iquzart@hotmail.com>
+#
+
 
 import random
 import os
