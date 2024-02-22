@@ -4,12 +4,12 @@
 The script created to ease the process of creating self signed certificates. It will create both CA and Server/Client certificates.
 
 Version: 3
-Encription: Sha256 with RSA Encription(4096 bit)
+Encription: SHA256 with RSA Encription(4096 bit)
 
 ### Create Certificate
-CA cenrtificate and key will be store under CA directory. 
+CA cenrtificate and key will be stored under CA directory. 
 
-```
+```bash
 python3 digital-cert.py
 ```
 
