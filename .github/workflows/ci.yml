@@ -1,0 +1,203 @@
+name: Certificate Generator CI
+
+on:
+  push:
+    branches: [main, develop]
+  pull_request:
+    branches: [main, develop]
+  workflow_dispatch:
+
+jobs:
+  test:
+    name: Test Certificate Generation
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        python-version: ["3.8", "3.9", "3.10", "3.11", "3.12"]
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Display Python version
+        run: python --version
+
+      - name: Create virtual environment
+        run: make env
+
+      - name: Install dependencies
+        run: make install
+        env:
+          PIP_TRUSTED_HOST: "pypi.org pypi.python.org files.pythonhosted.org"
+
+      - name: Verify installation
+        run: |
+          source venv/bin/activate
+          pip list
+
+      - name: Test certificate generation (automated)
+        run: |
+          # Create automated input for certificate generation
+          cat << EOF > test_input.txt
+          AE
+          Dubai
+          Emaar Square
+          XYZ Company
+          Information Technology
+          XYZ Company Test CA
+          test@xyz.ae
+          test-server.xyz.ae
+          EOF
+
+          source venv/bin/activate
+          python digital-cert.py < test_input.txt || true
+
+      - name: Verify CA directory created
+        run: |
+          if [ -d "CA" ]; then
+            echo "✓ CA directory created successfully"
+            ls -la CA/
+          else
+            echo "✗ CA directory not found"
+            exit 1
+          fi
+
+      - name: Verify CA certificate and key
+        run: |
+          if [ -f "CA/ca.crt" ] && [ -f "CA/ca.key" ]; then
+            echo "✓ CA certificate and key created"
+            openssl x509 -in CA/ca.crt -text -noout | head -20
+          else
+            echo "✗ CA certificate or key not found"
+            exit 1
+          fi
+
+      - name: Verify client certificate and key
+        run: |
+          if ls *.crt *.key 1> /dev/null 2>&1; then
+            echo "✓ Client certificates created"
+            ls -la *.crt *.key
+            for cert in *.crt; do
+              echo "Checking $cert:"
+              openssl x509 -in $cert -text -noout | head -20
+            done
+          else
+            echo "✗ Client certificates not found"
+            exit 1
+          fi
+
+      - name: Validate certificate properties
+        run: |
+          echo "Validating CA certificate..."
+          openssl x509 -in CA/ca.crt -noout -subject -issuer -dates
+
+          echo ""
+          echo "Validating client certificate..."
+          for cert in *.crt; do
+            if [ "$cert" != "CA/ca.crt" ]; then
+              openssl x509 -in $cert -noout -subject -issuer -dates
+            fi
+          done
+
+      - name: Test certificate verification
+        run: |
+          for cert in *.crt; do
+            if [ "$cert" != "CA/ca.crt" ]; then
+              echo "Verifying $cert against CA..."
+              openssl verify -CAfile CA/ca.crt $cert
+            fi
+          done
+
+      - name: List all generated files
+        run: make list
+
+      - name: Upload certificates as artifacts
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: certificates-python-${{ matrix.python-version }}
+          path: |
+            CA/
+            *.crt
+            *.key
+          retention-days: 7
+
+      - name: Clean up certificates
+        if: always()
+        run: make clean
+
+      - name: Verify cleanup
+        run: |
+          if ls *.crt *.key 1> /dev/null 2>&1; then
+            echo "��� Client certificates not cleaned"
+            exit 1
+          else
+            echo "✓ Client certificates cleaned successfully"
+          fi
+
+  lint:
+    name: Code Quality Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install linting tools
+        run: |
+          python -m pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org flake8 pylint
+
+      - name: Run flake8
+        run: |
+          flake8 digital-cert.py --max-line-length=120 --ignore=E501 || true
+
+      - name: Run pylint
+        run: |
+          pylint digital-cert.py --disable=all --enable=E,F || true
+
+  security:
+    name: Security Scan
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install security tools
+        run: |
+          python -m pip install --trusted-host pypi.org --trusted-host pypi.python.org --trusted-host files.pythonhosted.org bandit safety
+
+      - name: Run bandit security scan
+        run: |
+          bandit -r . -f json -o bandit-report.json || true
+          bandit -r . || true
+
+      - name: Check dependencies for vulnerabilities
+        run: |
+          if [ -f requirements.txt ]; then
+            safety check -r requirements.txt || true
+          fi
+
+      - name: Upload security report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: security-report
+          path: bandit-report.json
+          retention-days: 30
