@@ -1,95 +1,67 @@
-# Variables
-PYTHON := python3
-VENV := venv
-VENV_BIN := $(VENV)/bin
-PIP := $(VENV_BIN)/pip
-PYTHON_VENV := $(VENV_BIN)/python
+PYTHON ?= python3
+VENV ?= venv
+PYTHON_BIN := $(VENV)/bin/python
+PIP := $(PYTHON_BIN) -m pip
 SCRIPT := digital-cert.py
 CA_DIR := CA
-REQUIREMENTS := requirements.txt
 
-# Phony targets
-.PHONY: all help env install clean clean-all cert list clean-env
+.PHONY: all help env venv install cert run list check audit clean clean-all clean-artifacts clean-env
 
-# Default target
 all: help
 
-# Help target
 help:
-	@echo "Digital Certificate Generator"
-	@echo "============================="
-	@echo ""
-	@echo "Available targets:"
-	@echo "  make env        - Create Python virtual environment"
-	@echo "  make install    - Install required Python dependencies (in venv)"
-	@echo "  make cert       - Generate CA and client certificates"
-	@echo "  make list       - List generated certificates"
-	@echo "  make clean      - Remove generated client certificates and keys"
-	@echo "  make clean-env  - Remove Python virtual environment"
-	@echo "  make clean-all  - Remove all certificates including CA"
-	@echo "  make help       - Show this help message"
-	@echo ""
+	@printf "Digital Certificate Generator\n\n"
+	@printf "Available targets:\n"
+	@printf "  make env|venv        Create the Python virtual environment\n"
+	@printf "  make install         Install project dependencies\n"
+	@printf "  make cert|run        Generate CA and client certificates\n"
+	@printf "  make list            List generated certificates\n"
+	@printf "  make check           Compile-check the Python script\n"
+	@printf "  make audit           Audit Python dependencies\n"
+	@printf "  make clean           Remove generated client certificates and keys\n"
+	@printf "  make clean-all       Remove all generated certificates including the CA\n"
+	@printf "  make clean-env       Remove the virtual environment\n"
 
-# Create virtual environment
-env:
-	@echo "Creating Python virtual environment..."
-	@$(PYTHON) -m venv $(VENV)
-	@echo "Virtual environment created at ./$(VENV)"
-	@echo "To activate: source $(VENV_BIN)/activate"
+$(PYTHON_BIN):
+	$(PYTHON) -m venv $(VENV)
 
-# Install Python dependencies
-install: env
-	@echo "Installing dependencies in virtual environment..."
-	@if [ -f $(REQUIREMENTS) ]; then \
-		$(PIP) install --upgrade pip; \
-		$(PIP) install -r $(REQUIREMENTS); \
-		echo "Dependencies installed successfully"; \
-	else \
-		echo "Warning: $(REQUIREMENTS) not found"; \
-	fi
+$(VENV)/.installed: requirements.txt | $(PYTHON_BIN)
+	$(PIP) install --upgrade pip
+	$(PIP) install -r requirements.txt
+	touch $(VENV)/.installed
 
-# Generate certificates
-cert: $(VENV)
-	@echo "Generating certificates..."
-	@$(PYTHON_VENV) $(SCRIPT)
+$(VENV)/.audit-installed: | $(PYTHON_BIN)
+	$(PIP) install pip-audit
+	touch $(VENV)/.audit-installed
 
-$(VENV):
-	@echo "Virtual environment not found. Run 'make install' first."
-	@exit 1
+env: venv
 
-# List generated certificates
+venv: $(PYTHON_BIN)
+
+install: $(VENV)/.installed
+
+cert: $(VENV)/.installed
+	$(PYTHON_BIN) $(SCRIPT)
+
+run: cert
+
 list:
-	@echo "Generated certificates:"
-	@echo "======================"
-	@if [ -d $(CA_DIR) ]; then \
-		echo "CA Certificates:"; \
-		ls -lh $(CA_DIR)/; \
-		echo ""; \
-	fi
-	@echo "Client/Server Certificates:"; \
-	@ls -lh *.crt *.key 2>/dev/null || echo "No client certificates found"
+	@if [ -d "$(CA_DIR)" ]; then ls -lh "$(CA_DIR)"; else printf "No CA directory found\n"; fi
+	@ls -lh *.crt *.key 2>/dev/null || printf "No client certificates found\n"
 
-# Clean client certificates only
+check: $(VENV)/.installed
+	$(PYTHON_BIN) -m py_compile $(SCRIPT)
+
+audit: $(VENV)/.installed $(VENV)/.audit-installed
+	$(PYTHON_BIN) -m pip_audit -r requirements.txt
+
 clean:
-	@echo "Cleaning client certificates..."
-	@rm -f *.crt *.key
-	@echo "Client certificates removed"
+	rm -f *.crt *.key
 
-# Clean all certificates including CA
-clean-all:
-	@echo "WARNING: This will remove ALL certificates including CA!"
-	@read -p "Are you sure? [y/N] " -n 1 -r; \
-	echo ""; \
-	if [[ $REPLY =~ ^[Yy]$ ]]; then \
-		rm -rf $(CA_DIR); \
-		rm -f *.crt *.key; \
-		echo "All certificates removed"; \
-	else \
-		echo "Operation cancelled"; \
-	fi
+clean-all: clean
+	rm -rf $(CA_DIR)
 
-# Clean virtual environment
+clean-artifacts: clean-all
+
 clean-env:
-	@echo "Removing virtual environment..."
-	@rm -rf $(VENV)
-	@echo "Virtual environment removed"
+	rm -rf $(VENV) __pycache__

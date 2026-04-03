@@ -57,6 +57,8 @@ jobs:
 
           source venv/bin/activate
           python digital-cert.py < test_input.txt || true
+        env:
+          DIGITAL_CERT_PASSPHRASE: test-passphrase
 
       - name: Verify CA directory created
         run: |

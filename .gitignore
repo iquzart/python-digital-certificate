@@ -1,2 +1,8 @@
 .env
 .vscode
+.venv/
+venv/
+__pycache__/
+CA/
+*.crt
+*.key
