@@ -1,5 +1,7 @@
 # Digital Certificate Generator
 
+[![Certificate Generator CI](https://github.com/iquzart/python-digital-certificate/actions/workflows/ci.yml/badge.svg)](https://github.com/iquzart/python-digital-certificate/actions/workflows/ci.yml)
+
 ### About
 This script creates a self-signed CA and signed server/client certificates.
 
